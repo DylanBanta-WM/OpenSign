@@ -1,3 +1,4 @@
+import fs from 'fs';
 import dotenv from 'dotenv';
 dotenv.config({ quiet: true });
 import express from 'express';
@@ -148,6 +149,26 @@ export const config = {
               },
             },
             apiCallback: async ({ payload, locale }) => {
+              if (payload.templateName === 'passwordResetEmail') {
+                try {
+                  const userQuery = new Parse.Query(Parse.User);
+                  userQuery.equalTo('email', payload.to);
+                  const user = await userQuery.first({ useMasterKey: true });
+                  if (user?.get('isSetupEmail')) {
+                    const linkMatch = payload.html.match(/href="([^"]+)"/);
+                    if (linkMatch) {
+                      const link = linkMatch[1];
+                      payload.html = fs.readFileSync('./files/setup_email.html', 'utf8').replace('{{{link}}}', link);
+                      payload.text = fs.readFileSync('./files/setup_email.txt', 'utf8').replace('{{{link}}}', link);
+                      payload.subject = fs.readFileSync('./files/setup_email_subject.txt', 'utf8').trim();
+                    }
+                    user.unset('isSetupEmail');
+                    await user.save(null, { useMasterKey: true });
+                  }
+                } catch (e) {
+                  console.error('Error applying setup email template:', e);
+                }
+              }
               if (mailgunClient) {
                 const mailgunPayload = ApiPayloadConverter.mailgun(payload);
                 await mailgunClient.messages.create(mailgunDomain, mailgunPayload);

@@ -1,0 +1,7 @@
+Welcome to OpenSign!
+
+Your account has been created by your administration. Click the link below to set your password and get started:
+
+{{{link}}}
+
+If you did not expect this email, please contact your system administrator.
