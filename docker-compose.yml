@@ -6,6 +6,9 @@ services:
     volumes:
       - opensign-files:/usr/src/app/files
       - ./choose_password:/usr/src/app/node_modules/parse-server/views/choose_password
+      - ./apps/OpenSignServer/files/setup_email.html:/usr/src/app/files/setup_email.html
+      - ./apps/OpenSignServer/files/setup_email.txt:/usr/src/app/files/setup_email.txt
+      - ./apps/OpenSignServer/files/setup_email_subject.txt:/usr/src/app/files/setup_email_subject.txt
     ports:
       - "8082:8080"
     depends_on:
