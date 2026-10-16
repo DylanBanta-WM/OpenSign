@@ -160,7 +160,7 @@ export const config = {
       }
     : {}),
   filesAdapter: fsAdapter,
-  auth: { google: { enabled: true }, sso: SSOAuth },
+  auth: { google: { clientId: process.env.GOOGLE_CLIENT_ID }, sso: SSOAuth },
   // for fix Adapter prototype don't match expected prototype
   push: { queueOptions: { disablePushWorker: true } },
 };
@@ -192,7 +192,7 @@ function getUserIP(request) {
 }
 
 app.use(async function (req, res, next) {
-  const isFilePath = req.path.includes('files') || false;
+  const isFilePath = req.path?.includes('/files/') || false;
   if (isFilePath && req.method.toLowerCase() === 'get') {
     const serverUrl = new URL(process.env.SERVER_URL);
     const origin = serverUrl.pathname === '/api/app' ? serverUrl.origin + '/api' : serverUrl.origin;

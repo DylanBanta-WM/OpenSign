@@ -24,6 +24,31 @@ const refreshAccessToken = async refreshToken => {
   return response.data.access_token;
 };
 
+const getGmail = async (access_token, displayName) => {
+  try {
+    const res = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+
+    const gmail = res.data.email;
+    return `${displayName} <${gmail}>`;
+  } catch (err) {
+    console.log('gmail retrive error ', err);
+    return displayName;
+  }
+};
+
+export const encodeMimeAddress = address => {
+  const value = String(address || '');
+  const match = value.match(/^(.*?)\s*<([^<>]+)>$/);
+  const displayName = match ? match[1].trim() : value;
+
+  if (/^[\x00-\x7F]*$/.test(displayName)) return value;
+
+  const encodedName = Buffer.from(displayName, 'utf8').toString('base64');
+  return match ? `=?UTF-8?B?${encodedName}?= <${match[2]}>` : `=?UTF-8?B?${encodedName}?=`;
+};
+
 // Function to create a raw email message
 const makeEmail = async (
   to,
@@ -33,6 +58,7 @@ const makeEmail = async (
   url,
   pdfName,
   bcc,
+  cc,
   filename,
   certificatePath,
   replyto,
@@ -41,6 +67,7 @@ const makeEmail = async (
   const htmlContent = html;
   const boundary = 'boundary_' + Date.now().toString(16);
   const bccHeader = bcc && bcc.length > 0 ? `BCC: ${bcc.join(',')}\n` : ''; // Construct BCC header if provided
+  const ccHeader = cc && cc.length > 0 ? `CC: ${cc.join(',')}\n` : ''; // Construct CC header if provided
   const replyToHeader = replyto ? `Reply-To: ${replyto}\n` : ''; // Construct Reply-To header if provided
 
   let str;
@@ -101,7 +128,7 @@ const makeEmail = async (
         }
       } catch (err) {
         attachments = [file];
-        console.log('Err in read certificate sendmailv3', err);
+        console.log('sendMailGmailProvider read certificate error', err);
       }
     }
     const attachmentParts = attachments.map(attachment => {
@@ -122,8 +149,9 @@ const makeEmail = async (
       'Content-Type: multipart/mixed; boundary="' + boundary + '"\n',
       'MIME-Version: 1.0\n',
       `To: ${to}\n`,
-      `From: ${from}\n`,
+      `From: ${encodeMimeAddress(from)}\n`,
       bccHeader,
+      ccHeader,
       replyToHeader,
       `Subject: ${subject}\n\n`,
       '--' + boundary + '\n',
@@ -139,8 +167,9 @@ const makeEmail = async (
       'Content-Type: multipart/mixed; boundary="' + boundary + '"\n',
       'MIME-Version: 1.0\n',
       `To: ${to}\n`,
-      `From: ${from}\n`,
+      `From: ${encodeMimeAddress(from)}\n`,
       bccHeader,
+      ccHeader,
       replyToHeader,
       `Subject: ${subject}\n\n`,
       '--' + boundary + '\n',
@@ -155,8 +184,19 @@ const makeEmail = async (
   return encodedMail;
 };
 export default async function sendMailGmailProvider(_extRes, template) {
-  const { sender, receiver, subject, html, url, pdfName, bcc, filename, certificatePath, replyto } =
-    template;
+  const {
+    sender,
+    receiver,
+    subject,
+    html,
+    url,
+    pdfName,
+    bcc,
+    cc,
+    filename,
+    certificatePath,
+    replyto,
+  } = template;
 
   if (_extRes) {
     let refresh_token = '';
@@ -166,7 +206,8 @@ export default async function sendMailGmailProvider(_extRes, template) {
 
     try {
       // Construct email message
-      const from = sender || _extRes.Email || 'me';
+      const displayName = sender || _extRes.Email || 'me';
+      const from = await getGmail(access_token, displayName);
       const to = receiver;
       const randomNumber = Math.floor(Math.random() * 5000);
       const testPdf = `test_${randomNumber}.pdf`;
@@ -178,6 +219,7 @@ export default async function sendMailGmailProvider(_extRes, template) {
         url,
         pdfName,
         bcc,
+        cc,
         filename,
         certificatePath,
         replyto,
@@ -203,12 +245,13 @@ export default async function sendMailGmailProvider(_extRes, template) {
         try {
           fs.unlinkSync(testPdf);
         } catch (err) {
-          console.log('Err in unlink pdf sendmailv3');
+          console.log('sendMailGmailProvider unlink pdf error');
         }
       }
       return { code: 200, message: 'Email sent successfully' };
     } catch (error) {
-      console.error('Error sending email:', error);
+      const message = error?.response?.data || error?.message || 'Unknown error';
+      console.error('Error sending email:', message);
       return { code: 500, message: 'Failed to send email ' + error };
     }
   }

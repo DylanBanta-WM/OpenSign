@@ -63,6 +63,7 @@ import getSignature from './parsefunction/getSignature.js';
 import updateEmailTemplates from './parsefunction/updateEmailTemplates.js';
 import triggerEvent from './parsefunction/triggerEvent.js';
 import setWidgetPreferences from './parsefunction/setWidgetPreferences.js';
+import createDocumentFromApp from './parsefunction/createDocumentFromApp.js';
 import '../custom/cloud.js'; // West Muskingum customizations
 
 // This afterSave function triggers after an object is added or updated in the specified class, allowing for post-processing logic.
@@ -137,3 +138,4 @@ Parse.Cloud.define('getdefaultsignature', getSignature);
 Parse.Cloud.define('updateemailtemplates', updateEmailTemplates);
 Parse.Cloud.define('triggerevent', triggerEvent);
 Parse.Cloud.define('setwidgetpreferences', setWidgetPreferences);
+Parse.Cloud.define('createdocumentfromapp', createDocumentFromApp);

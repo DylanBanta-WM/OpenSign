@@ -3,6 +3,7 @@ import { cloudServerUrl, mailTemplate, replaceMailVaribles, serverAppId } from '
 import { setDocumentCount } from '../../utils/CountUtils.js';
 
 import crypto from 'crypto';
+import sendSystemMail from './sendSystemMail.js';
 
 function chunkArray(arr, size) {
   const out = [];
@@ -50,9 +51,6 @@ async function sendOwnerSummaryEmail({
   failedList,
 }) {
   try {
-    const url = `${serverUrl}/functions/sendmailv3`;
-    const headers = { 'Content-Type': 'application/json', 'X-Parse-Application-Id': appId };
-
     const subject = `Bulk send finished: ${failed} of ${total} failed to create`;
 
     const failureHtml = failedList?.length
@@ -83,7 +81,7 @@ async function sendOwnerSummaryEmail({
       html,
     };
 
-    await axios.post(url, params, { headers });
+    await sendSystemMail({ params });
   } catch (e) {
     console.log('batchdoc Failed to send owner summary email:', e?.message || e);
   }
@@ -92,7 +90,7 @@ async function sendOwnerSummaryEmail({
 async function deductcount(docsCount, extUserId) {
   try {
     if (extUserId) {
-      setDocumentCount(extUserId);
+      setDocumentCount(extUserId, docsCount);
     }
   } catch (err) {
     console.log('batchdoc deductcount error: ', err);
@@ -110,17 +108,32 @@ async function sendMail(document, publicUrl) {
     year: 'numeric',
   });
   let signerMail = document.Placeholders?.filter(x => x?.Role !== 'prefill');
-  const senderName = document.ExtUserPtr.Name;
-  const senderEmail = document.ExtUserPtr.Email;
+  const senderName = document?.SenderName || document.ExtUserPtr.Name;
+  const senderEmail = document?.SenderMail || document.ExtUserPtr.Email;
+  const from =
+    document?.SenderName || document?.ExtUserPtr?.UseNameAsSender === true
+      ? document.ExtUserPtr.Name
+      : senderEmail;
 
   if (document.SendinOrder) {
-    signerMail = signerMail.slice();
-    signerMail.splice(1);
+    const getRole = signer => signer?.SignerRole || signer?.signer_role || signer?.role || 'signer';
+    const firstSignerIndex = signerMail.findIndex(signer => getRole(signer) === 'signer');
+    signerMail = signerMail.filter((signer, idx) => {
+      const role = getRole(signer);
+      return role === 'viewer' || idx === firstSignerIndex;
+    });
+    if (signerMail.length === 0 && document?.Placeholders?.length > 0) {
+      signerMail = document.Placeholders.filter(x => x?.Role !== 'prefill').slice(0, 1);
+    }
   }
+
   for (let i = 0; i < signerMail.length; i++) {
     try {
       let url = `${serverUrl}/functions/sendmailv3`;
-      const headers = { 'Content-Type': 'application/json', 'X-Parse-Application-Id': appId };
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Parse-Application-Id': appId,
+      };
       const objectId = signerMail[i]?.signerObjId;
       const hostUrl = baseUrl.origin;
       let encodeBase64;
@@ -171,7 +184,7 @@ async function sendMail(document, publicUrl) {
         extUserId: document.ExtUserPtr.objectId,
         recipient: existSigner?.Email || signerMail[i].email,
         subject: replaceVar?.subject ? replaceVar?.subject : mailTemplate(mailparam).subject,
-        from: document.ExtUserPtr.Email,
+        from: from,
         replyto: senderEmail || '',
         html: replaceVar?.body ? replaceVar?.body : mailTemplate(mailparam).body,
       };
@@ -215,6 +228,7 @@ async function startBulkSendInBackground(userId, Documents, Ip, parseConfig, typ
     }
     let mailBody = x?.ExtUserPtr?.TenantId?.RequestBody || '';
     let mailSubject = x?.ExtUserPtr?.TenantId?.RequestSubject || '';
+    let EmailEditorType = x?.ExtUserPtr?.TenantId?.EmailEditorType || '';
     return {
       method: 'POST',
       path: '/app/classes/contracts_Document',
@@ -225,6 +239,7 @@ async function startBulkSendInBackground(userId, Documents, Ip, parseConfig, typ
         Description: x.Description,
         CreatedBy: x.CreatedBy,
         SendinOrder: x.SendinOrder || true,
+        SendInOrderStrict: x.SendInOrderStrict || false,
         ExtUserPtr: {
           __type: 'Pointer',
           className: x.ExtUserPtr.className,
@@ -261,12 +276,17 @@ async function startBulkSendInBackground(userId, Documents, Ip, parseConfig, typ
         IsEnableOTP: x?.IsEnableOTP || false,
         IsTourEnabled: x?.IsTourEnabled || false,
         AllowModifications: x?.AllowModifications || false,
+        ...(x?.SenderName ? { SenderName: x?.SenderName } : {}),
+        ...(x?.SenderMail ? { SenderMail: x?.SenderMail } : {}),
+        ...(type === 'bulksend' ? { BulkSendToken: generateId(10) } : {}),
         ...(x?.SignatureType ? { SignatureType: x?.SignatureType } : {}),
         ...(x?.NotifyOnSignatures ? { NotifyOnSignatures: x?.NotifyOnSignatures } : {}),
         ...(x?.Bcc?.length > 0 ? { Bcc: x?.Bcc } : {}),
+        ...(x?.Cc?.length > 0 ? { Cc: x?.Cc } : {}),
         ...(x?.RedirectUrl ? { RedirectUrl: x?.RedirectUrl } : {}),
         ...(mailBody ? { RequestBody: mailBody } : {}),
         ...(mailSubject ? { RequestSubject: mailSubject } : {}),
+        ...(EmailEditorType ? { EmailEditorType: EmailEditorType } : {}),
         ...(x?.objectId
           ? {
               TemplateId: {
@@ -307,8 +327,8 @@ export default async function createBatchDocs(request) {
   const Documents = JSON.parse(strDocuments);
 
   const Ip = request?.headers?.['x-real-ip'] || '';
-  // Access the host from the headers
-  const publicUrl = request.headers.public_url;
+  // Use the browser origin so signing links keep the custom domain.
+  let publicUrl = request.headers.origin || request.headers.public_url;
   const parseConfig = {
     baseURL: serverUrl,
     headers: {

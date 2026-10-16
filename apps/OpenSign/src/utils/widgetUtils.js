@@ -8,7 +8,8 @@ import {
   radioButtonWidget,
   textInputWidget,
   textWidget,
-  cellsWidget
+  cellsWidget,
+  addWidgetOptions
 } from "../constant/Utils";
 import { base64StringtoFile, uploadFile } from "./fileUtils";
 import { sanitizeFileName } from "./sanitizeFileName";
@@ -65,10 +66,11 @@ export const saveToMySign = async (widget) => {
 };
 
 // helper: does this signer already have any signature widget?
-export const hasSignatureWidget = (s) =>
-  (s.placeHolder ?? []).some((ph) =>
+export const hasSignatureWidget = (s) => {
+  return (s.placeHolder ?? []).some((ph) =>
     (ph?.pos ?? []).some((p) => p?.type === "signature")
   );
+};
 
 export const widgetNamesArr = (placeholders, signerId) => {
   const widgetNames =
@@ -104,6 +106,43 @@ export const hasDuplicateWidgetNames = (placeholders = []) => {
   }
 
   return false;
+};
+
+// `createCustomPositionWidget` builds a dropObj and placeHolder for a widget placed
+// via click-and-drag drawing (i.e. when customOptions.customPosition is provided).
+// Returns { dropObj, placeHolder } where placeHolder.pos === [dropObj].
+export const createCustomPositionWidget = ({
+  customPosition,
+  key,
+  containerScale,
+  posZIndex,
+  dragTypeValue,
+  pageNumber,
+  owner,
+  signerPlaceHolder,
+  roleName
+}) => {
+  const { xPosition, yPosition, width, height } = customPosition;
+  const dropObj = {
+    xPosition,
+    yPosition,
+    isStamp: false,
+    key,
+    scale: containerScale,
+    zIndex: posZIndex,
+    type: dragTypeValue,
+    options: addWidgetOptions(
+      dragTypeValue,
+      owner,
+      signerPlaceHolder,
+      roleName
+    ),
+    Width: width,
+    Height: height
+  };
+  const dropData = [dropObj];
+  const placeHolder = { pageNumber, pos: dropData };
+  return { dropObj, placeHolder };
 };
 
 /**
@@ -452,12 +491,20 @@ export const loadPdfOnce = async (url) => {
 };
 
 export const mailModalHead = (sendinOrder, mailStatus, isOwner) => {
-  const HEAD = { success: "mails-sent", quotareached: "quota-mail-head" };
+  const HEAD = {
+    success: "mails-sent",
+    quotareached: "quota-mail-head",
+    emailnotverified: "email-not-verified-head"
+  };
 
   return sendinOrder
     ? isOwner
-      ? "mail-status-head"
-      : "mails-sent"
+      ? mailStatus === "emailnotverified"
+        ? "email-not-verified-head"
+        : "mail-status-head"
+      : mailStatus === "emailnotverified"
+        ? "email-not-verified-head"
+        : "mails-sent"
     : (HEAD[mailStatus] ?? "mail-not-delivered");
 };
 
