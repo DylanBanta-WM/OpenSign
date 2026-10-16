@@ -1,10 +1,8 @@
 import fs from 'node:fs';
-import path from 'path';
-import { cloudServerUrl, replaceMailVaribles, serverAppId } from '../../Utils.js';
+import { cloudServerUrl, replaceMailVaribles, serverAppId } from '../Utils.js';
 import axios from 'axios';
 import crypto from 'crypto';
 
-const __dirname = path.resolve();
 const serverUrl = cloudServerUrl;
 const appId = serverAppId;
 
@@ -124,10 +122,10 @@ export default async function sendReminderEmail(request) {
   const customSubject = tenant?.get('ReminderEmailSubject') || '';
 
   const defaultSubject = fs
-    .readFileSync(path.join(__dirname, 'files/reminder_email_subject.txt'), 'utf8')
+    .readFileSync(new URL('./templates/reminder_email_subject.txt', import.meta.url), 'utf8')
     .trim();
   const defaultHtmlBody = fs.readFileSync(
-    path.join(__dirname, 'files/reminder_email.html'),
+    new URL('./templates/reminder_email.html', import.meta.url),
     'utf8'
   );
 

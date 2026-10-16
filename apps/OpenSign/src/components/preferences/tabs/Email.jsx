@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import MailTemplateEditor from "../MailTemplateEditor";
+import CustomMailTemplates from "../../../custom/CustomMailTemplates"; // West Muskingum
 
 const EmailTab = () => {
   const { t } = useTranslation();
@@ -15,6 +16,7 @@ const EmailTab = () => {
           }
           tenantId={tenantInfo?.objectId}
         />
+        <CustomMailTemplates info={tenantInfo} tenantId={tenantInfo?.objectId} />{/* West Muskingum */}
     </div>
   );
 };

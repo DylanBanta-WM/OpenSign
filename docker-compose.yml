@@ -1,21 +1,15 @@
 services:
   server:
     image: westm-opensignserver:latest
+    build:
+      context: .
+      dockerfile: westm/server.Dockerfile
     restart: unless-stopped
     container_name: OpenSignServer-container
     volumes:
+      # Only data lives outside the image. Code, templates, logos and the
+      # choose_password page are baked in by westm/server.Dockerfile.
       - ./Volumes/opensign-files:/usr/src/app/files
-      - ./choose_password:/usr/src/app/node_modules/parse-server/views/choose_password
-      - ./apps/OpenSignServer/files/setup_email.html:/usr/src/app/files/setup_email.html
-      - ./apps/OpenSignServer/files/setup_email.txt:/usr/src/app/files/setup_email.txt
-      - ./apps/OpenSignServer/files/setup_email_subject.txt:/usr/src/app/files/setup_email_subject.txt
-      - ./apps/OpenSignServer/files/reminder_email.html:/usr/src/app/files/reminder_email.html
-      - ./apps/OpenSignServer/files/reminder_email.txt:/usr/src/app/files/reminder_email.txt
-      - ./apps/OpenSignServer/files/reminder_email_subject.txt:/usr/src/app/files/reminder_email_subject.txt
-      - ./apps/OpenSignServer/index.js:/usr/src/app/index.js
-      - ./apps/OpenSignServer/cloud/main.js:/usr/src/app/cloud/main.js
-      - ./apps/OpenSignServer/cloud/parsefunction/updateTenant.js:/usr/src/app/cloud/parsefunction/updateTenant.js
-      - ./apps/OpenSignServer/cloud/parsefunction/sendReminderEmail.js:/usr/src/app/cloud/parsefunction/sendReminderEmail.js
     ports:
       - "8082:8080"
     depends_on:
@@ -46,6 +40,9 @@ services:
       - app-network
   client:
     image: westm-opensign:latest
+    build:
+      context: .
+      dockerfile: westm/client.Dockerfile
     restart: unless-stopped
     container_name: OpenSign-container
     depends_on:

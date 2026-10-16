@@ -1,4 +1,3 @@
-import fs from 'fs';
 import dotenv from 'dotenv';
 dotenv.config({ quiet: true });
 import express from 'express';
@@ -19,6 +18,7 @@ import { appName, cloudServerUrl, serverAppId, smtpenable, smtpsecure, useLocal 
 import { SSOAuth } from './auth/authadapter.js';
 import runDbMigrations from './migrationdb/index.js';
 import { validateSignedLocalUrl } from './cloud/parsefunction/getSignedUrl.js';
+import { applyCustomSetupEmail } from './custom/setupEmail.js'; // West Muskingum
 let fsAdapter;
 
 if (useLocal !== 'true') {
@@ -149,43 +149,7 @@ export const config = {
               },
             },
             apiCallback: async ({ payload, locale }) => {
-              try {
-                const userQuery = new Parse.Query(Parse.User);
-                userQuery.equalTo('email', payload.to);
-                const user = await userQuery.first({ useMasterKey: true });
-                if (user?.get('isSetupEmail')) {
-                  const linkMatch = payload.html.match(/href="([^"]+)"/);
-                  if (linkMatch) {
-                    const link = linkMatch[1];
-                    // Check if the tenant has a custom setup email template
-                    let customSetupBody = null;
-                    let customSetupSubject = null;
-                    try {
-                      const extUserQuery = new Parse.Query('contracts_Users');
-                      extUserQuery.equalTo('UserId', { __type: 'Pointer', className: '_User', objectId: user.id });
-                      extUserQuery.include('TenantId');
-                      const extUser = await extUserQuery.first({ useMasterKey: true });
-                      const tenant = extUser?.get('TenantId');
-                      customSetupBody = tenant?.get('SetupEmailBody');
-                      customSetupSubject = tenant?.get('SetupEmailSubject');
-                    } catch (tenantErr) {
-                      console.error('Error fetching tenant for setup email:', tenantErr);
-                    }
-                    if (customSetupBody) {
-                      payload.html = customSetupBody.replace('{{{link}}}', link).replace('{{link}}', link);
-                      payload.subject = customSetupSubject || fs.readFileSync(path.join(__dirname, 'files/setup_email_subject.txt'), 'utf8').trim();
-                    } else {
-                      payload.html = fs.readFileSync(path.join(__dirname, 'files/setup_email.html'), 'utf8').replace('{{{link}}}', link);
-                      payload.subject = fs.readFileSync(path.join(__dirname, 'files/setup_email_subject.txt'), 'utf8').trim();
-                    }
-                    payload.text = fs.readFileSync(path.join(__dirname, 'files/setup_email.txt'), 'utf8').replace('{{{link}}}', link);
-                  }
-                  user.unset('isSetupEmail');
-                  await user.save(null, { useMasterKey: true });
-                }
-              } catch (e) {
-                console.error('Error applying setup email template:', e);
-              }
+              await applyCustomSetupEmail(payload); // West Muskingum
               if (mailgunClient) {
                 const mailgunPayload = ApiPayloadConverter.mailgun(payload);
                 await mailgunClient.messages.create(mailgunDomain, mailgunPayload);
@@ -210,7 +174,7 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 app.use(function (req, res, next) {
   req.headers['x-real-ip'] = getUserIP(req);
-  const publicUrl = process.env.PUBLIC_URL || 'https://' + req?.get('host');
+  const publicUrl = process.env.PUBLIC_URL || 'https://' + req?.get('host'); // West Muskingum: PUBLIC_URL override
   req.headers['public_url'] = publicUrl;
   next();
 });

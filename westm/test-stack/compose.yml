@@ -1,0 +1,27 @@
+# Throwaway local stack for westm/smoke-test.sh. Empty database, dummy secrets,
+# all email captured by Mailpit (http://localhost:8025). Not production.
+#   TAG=<image tag> docker compose up -d
+name: wmtest
+services:
+  testmongo:
+    image: mongo:8.2.5
+    tmpfs: [/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      retries: 20
+  mailpit:
+    image: axllent/mailpit
+    ports: ["127.0.0.1:8025:8025"]
+  server:
+    image: westm-opensignserver:${TAG}
+    depends_on:
+      testmongo: {condition: service_healthy}
+    env_file: test.env
+    environment: [NODE_ENV=production]
+    volumes: [/usr/src/app/files]
+    ports: ["127.0.0.1:8092:8080"]
+  client:
+    image: westm-opensign:${TAG}
+    env_file: test.env
+    ports: ["127.0.0.1:3010:3000"]

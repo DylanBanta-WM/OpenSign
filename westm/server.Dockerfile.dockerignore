@@ -1,0 +1,8 @@
+# Build context is the repo root; keep data and junk out of it.
+**/node_modules
+**/npm-debug.log
+.git
+Volumes
+Temp
+.claude
+**/.env*
