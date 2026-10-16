@@ -4,15 +4,23 @@ services:
     restart: unless-stopped
     container_name: OpenSignServer-container
     volumes:
-      - opensign-files:/usr/src/app/files
+      - ./Volumes/opensign-files:/usr/src/app/files
       - ./choose_password:/usr/src/app/node_modules/parse-server/views/choose_password
       - ./apps/OpenSignServer/files/setup_email.html:/usr/src/app/files/setup_email.html
       - ./apps/OpenSignServer/files/setup_email.txt:/usr/src/app/files/setup_email.txt
       - ./apps/OpenSignServer/files/setup_email_subject.txt:/usr/src/app/files/setup_email_subject.txt
+      - ./apps/OpenSignServer/files/reminder_email.html:/usr/src/app/files/reminder_email.html
+      - ./apps/OpenSignServer/files/reminder_email.txt:/usr/src/app/files/reminder_email.txt
+      - ./apps/OpenSignServer/files/reminder_email_subject.txt:/usr/src/app/files/reminder_email_subject.txt
+      - ./apps/OpenSignServer/index.js:/usr/src/app/index.js
+      - ./apps/OpenSignServer/cloud/main.js:/usr/src/app/cloud/main.js
+      - ./apps/OpenSignServer/cloud/parsefunction/updateTenant.js:/usr/src/app/cloud/parsefunction/updateTenant.js
+      - ./apps/OpenSignServer/cloud/parsefunction/sendReminderEmail.js:/usr/src/app/cloud/parsefunction/sendReminderEmail.js
     ports:
       - "8082:8080"
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     env_file: .env.prod
     environment:
       - NODE_ENV=production
@@ -25,9 +33,15 @@ services:
     restart: unless-stopped
     container_name: mongo-container
     volumes:
-      - data-volume:/data/db
+      - ./Volumes/mongo-data:/data/db
     # ports:
     #   - "27018:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     networks:
       - app-network
   client:
@@ -62,9 +76,7 @@ networks:
   app-network:
     driver: bridge
 
-volumes:
-  data-volume:
-  opensign-files:
+# volumes:
   # web-root:
   # caddy_data:
   # caddy_config:

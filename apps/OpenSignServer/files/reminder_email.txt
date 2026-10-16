@@ -1,0 +1,9 @@
+Hi {{receiver_name}},
+
+This is a friendly reminder that {{sender_name}} has requested your signature on {{document_title}}.
+
+This document is still awaiting your review and signature. Please use the link below to complete the signing process.
+
+Sign here: {{signing_url}}
+
+If you have already signed this document, please disregard this reminder.

@@ -28,3 +28,8 @@ apps/OpenSignServer/files/files/*
 
 .env.prod
 API.md
+# Local runtime data / scratch
+.claude/
+Temp/
+Volumes/
+*.bak-*

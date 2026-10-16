@@ -24,19 +24,31 @@ const MailTemplateEditor = ({
   const [completionBody, setCompletionBody] = useState("");
   const [completionSubject, setCompletionSubject] = useState("");
   const [isTemplateLoaded, setIsTemplateLoaded] = useState(false);
+  const [setupEmailBody, setSetupEmailBody] = useState("");
+  const [setupEmailSubject, setSetupEmailSubject] = useState("");
+  const [reminderEmailBody, setReminderEmailBody] = useState("");
+  const [reminderEmailSubject, setReminderEmailSubject] = useState("");
   const [isDefaultMail, setIsDefaultMail] = useState({
     requestMail: false,
-    completionMail: false
+    completionMail: false,
+    setupMail: false,
+    reminderMail: false,
   });
   const [isMailLoader, setIsMailLoader] = useState({
     request: false,
-    completion: false
+    completion: false,
+    setup: false,
+    reminder: false,
   });
   const [isalert, setIsAlert] = useState({ type: "success", msg: "" });
   const defaultRequestSubject = `{{sender_name}} has requested you to sign {{document_title}}`;
   const defaultRequestBody = `<p>Hi {{receiver_name}},</p><br><p>We hope this email finds you well. {{sender_name}}&nbsp;has requested you to review and sign&nbsp;{{document_title}}.</p><p>Your signature is crucial to proceed with the next steps as it signifies your agreement and authorization.</p><br><p><a href='{{signing_url}}' rel='noopener noreferrer' target='_blank'>Sign here</a></p><br><br><p>If you have any questions or need further clarification regarding the document or the signing process, please contact the sender.</p><br><p>Thanks</p><p> Team ${appName}</p><br>`;
   const defaultCompletionSubject = `Document {{document_title}} has been signed by all parties`;
   const defaultCompletionBody = `<p>Hi {{sender_name}},</p><br><p>All parties have successfully signed the document {{document_title}}. Kindly download the document from the attachment.</p><br><p>Thanks</p><p> Team ${appName}</p><br>`;
+  const defaultSetupEmailSubject = `Welcome to ${appName} - Set Your Password`;
+  const defaultSetupEmailBody = `<p>Welcome to ${appName}!</p><br><p>Your account has been created by your administration. Click the button below to set your password and get started.</p><br><p><a href='{{link}}' rel='noopener noreferrer' target='_blank'>Set Your Password</a></p><br><p>If you did not expect this email, please contact your system administrator.</p>`;
+  const defaultReminderEmailSubject = `Reminder: Your signature is needed on {{document_title}}`;
+  const defaultReminderEmailBody = `<p>Hi {{receiver_name}},</p><br><p>This is a friendly reminder that <strong>{{sender_name}}</strong> has requested your signature on <strong>{{document_title}}</strong>.</p><p>This document is still awaiting your review and signature. Please take a moment to complete the signing process.</p><br><p><a href='{{signing_url}}' rel='noopener noreferrer' target='_blank'>Sign Document</a></p><br><p>If you have already signed this document, please disregard this reminder.</p>`;
   const cloudfunction =
         "updatetenant";
 
@@ -48,9 +60,10 @@ const MailTemplateEditor = ({
   ]);
 
   const handleModifyMail = (mode) => {
-    mode === "request"
-      ? setIsDefaultMail((p) => ({ ...p, requestMail: !p?.requestMail }))
-      : setIsDefaultMail((p) => ({ ...p, completionMail: !p?.completionMail }));
+    if (mode === "request") setIsDefaultMail((p) => ({ ...p, requestMail: !p?.requestMail }));
+    else if (mode === "completion") setIsDefaultMail((p) => ({ ...p, completionMail: !p?.completionMail }));
+    else if (mode === "setup") setIsDefaultMail((p) => ({ ...p, setupMail: !p?.setupMail }));
+    else if (mode === "reminder") setIsDefaultMail((p) => ({ ...p, reminderMail: !p?.reminderMail }));
   };
   const fetchSubscription = async () => {
       await tenantEmailTemplate(info);
@@ -79,6 +92,24 @@ const MailTemplateEditor = ({
         setCompletionBody(defaultCompletionBody);
         setCompletionSubject(defaultCompletionSubject);
         setIsDefaultMail((prev) => ({ ...prev, completionMail: true }));
+      }
+      if (updateRes?.SetupEmailBody) {
+        setSetupEmailBody(updateRes?.SetupEmailBody);
+        setSetupEmailSubject(updateRes?.SetupEmailSubject);
+        setIsDefaultMail((prev) => ({ ...prev, setupMail: false }));
+      } else {
+        setSetupEmailBody(defaultSetupEmailBody);
+        setSetupEmailSubject(defaultSetupEmailSubject);
+        setIsDefaultMail((prev) => ({ ...prev, setupMail: true }));
+      }
+      if (updateRes?.ReminderEmailBody) {
+        setReminderEmailBody(updateRes?.ReminderEmailBody);
+        setReminderEmailSubject(updateRes?.ReminderEmailSubject);
+        setIsDefaultMail((prev) => ({ ...prev, reminderMail: false }));
+      } else {
+        setReminderEmailBody(defaultReminderEmailBody);
+        setReminderEmailSubject(defaultReminderEmailSubject);
+        setIsDefaultMail((prev) => ({ ...prev, reminderMail: true }));
       }
       setIsTemplateLoaded((prev) => !prev);
     }
@@ -153,13 +184,61 @@ const MailTemplateEditor = ({
     }
   });
 
+  //function to save setup email template
+  const handleSaveSetupEmail = withSessionValidation(async (e) => {
+    e.preventDefault();
+    try {
+      const replacedHtmlBody = setupEmailBody.replace(/"/g, "'");
+      const htmlBody = `<html><head><meta http-equiv='Content-Type' content='text/html; charset=UTF-8' /></head><body>${replacedHtmlBody}</body></html>`;
+      const updateTenant = await Parse.Cloud.run(cloudfunction, {
+        tenantId: tenantId,
+        details: { SetupEmailBody: htmlBody, SetupEmailSubject: setupEmailSubject }
+      });
+      if (updateTenant) {
+        const updateRes = JSON.parse(JSON.stringify(updateTenant));
+        setSetupEmailBody(updateRes?.SetupEmailBody);
+        setSetupEmailSubject(updateRes?.SetupEmailSubject);
+        updateValuesInRedux("SetupEmailSubject", "SetupEmailBody", updateRes);
+        setIsAlert({ type: "success", msg: t("saved-successfully") });
+        setTimeout(() => setIsAlert({ type: "", msg: "" }), 1500);
+      }
+    } catch (err) {
+      console.error("Error while saving setup email template: ", err);
+      setIsAlert({ type: "danger", msg: t("something-went-wrong-mssg") });
+      setTimeout(() => setIsAlert({ type: "", msg: "" }), 1500);
+    }
+  });
+  //function to save reminder email template
+  const handleSaveReminderEmail = withSessionValidation(async (e) => {
+    e.preventDefault();
+    try {
+      const replacedHtmlBody = reminderEmailBody.replace(/"/g, "'");
+      const htmlBody = `<html><head><meta http-equiv='Content-Type' content='text/html; charset=UTF-8' /></head><body>${replacedHtmlBody}</body></html>`;
+      const updateTenant = await Parse.Cloud.run(cloudfunction, {
+        tenantId: tenantId,
+        details: { ReminderEmailBody: htmlBody, ReminderEmailSubject: reminderEmailSubject }
+      });
+      if (updateTenant) {
+        const updateRes = JSON.parse(JSON.stringify(updateTenant));
+        setReminderEmailBody(updateRes?.ReminderEmailBody);
+        setReminderEmailSubject(updateRes?.ReminderEmailSubject);
+        updateValuesInRedux("ReminderEmailSubject", "ReminderEmailBody", updateRes);
+        setIsAlert({ type: "success", msg: t("saved-successfully") });
+        setTimeout(() => setIsAlert({ type: "", msg: "" }), 1500);
+      }
+    } catch (err) {
+      console.error("Error while saving reminder email template: ", err);
+      setIsAlert({ type: "danger", msg: t("something-went-wrong-mssg") });
+      setTimeout(() => setIsAlert({ type: "", msg: "" }), 1500);
+    }
+  });
   //function to use reset form
-  const handleReset = withSessionValidation(async (request, completion) => {
+  const handleReset = withSessionValidation(async (type) => {
     let extUser =
       localStorage.getItem("Extand_Class") &&
       JSON.parse(localStorage.getItem("Extand_Class"))?.[0];
-    handleModifyMail(request);
-    if (request && !isDefaultMail?.requestMail) {
+    if (type === "request" && !isDefaultMail?.requestMail) {
+      handleModifyMail("request");
       setRequestBody(defaultRequestBody);
       setRequestSubject(defaultRequestSubject);
       setIsMailLoader((p) => ({ ...p, request: true }));
@@ -168,22 +247,20 @@ const MailTemplateEditor = ({
           tenantId: tenantId,
           details: { RequestBody: "", RequestSubject: "" }
         });
-
         if (extUser && extUser?.objectId) {
             extUser.TenantId.RequestBody = "";
             extUser.TenantId.RequestSubject = "";
           const _extUser = JSON.parse(JSON.stringify(extUser));
           localStorage.setItem("Extand_Class", JSON.stringify([_extUser]));
-          dispatch(
-            setUserInfo({ ...info, RequestSubject: "", RequestBody: "" })
-          );
+          dispatch(setUserInfo({ ...info, RequestSubject: "", RequestBody: "" }));
         }
       } catch (err) {
         console.error("Error while resetting request mail: ", err);
       } finally {
         setIsMailLoader((p) => ({ ...p, request: false }));
       }
-    } else if (completion && !isDefaultMail?.completionMail) {
+    } else if (type === "completion" && !isDefaultMail?.completionMail) {
+      handleModifyMail("completion");
       setCompletionSubject(defaultCompletionSubject);
       setCompletionBody(defaultCompletionBody);
       setIsMailLoader((p) => ({ ...p, completion: true }));
@@ -197,14 +274,42 @@ const MailTemplateEditor = ({
             extUser.TenantId.CompletionSubject = "";
           const _extUser = JSON.parse(JSON.stringify(extUser));
           localStorage.setItem("Extand_Class", JSON.stringify([_extUser]));
-          dispatch(
-            setUserInfo({ ...info, CompletionSubject: "", CompletionBody: "" })
-          );
+          dispatch(setUserInfo({ ...info, CompletionSubject: "", CompletionBody: "" }));
         }
       } catch (err) {
         console.error("Error while resetting completion mail: ", err);
       } finally {
         setIsMailLoader((p) => ({ ...p, completion: false }));
+      }
+    } else if (type === "setup" && !isDefaultMail?.setupMail) {
+      setIsDefaultMail((p) => ({ ...p, setupMail: true }));
+      setSetupEmailBody(defaultSetupEmailBody);
+      setSetupEmailSubject(defaultSetupEmailSubject);
+      setIsMailLoader((p) => ({ ...p, setup: true }));
+      try {
+        await Parse.Cloud.run(cloudfunction, {
+          tenantId: tenantId,
+          details: { SetupEmailBody: "", SetupEmailSubject: "" }
+        });
+      } catch (err) {
+        console.error("Error while resetting setup email: ", err);
+      } finally {
+        setIsMailLoader((p) => ({ ...p, setup: false }));
+      }
+    } else if (type === "reminder" && !isDefaultMail?.reminderMail) {
+      setIsDefaultMail((p) => ({ ...p, reminderMail: true }));
+      setReminderEmailBody(defaultReminderEmailBody);
+      setReminderEmailSubject(defaultReminderEmailSubject);
+      setIsMailLoader((p) => ({ ...p, reminder: true }));
+      try {
+        await Parse.Cloud.run(cloudfunction, {
+          tenantId: tenantId,
+          details: { ReminderEmailBody: "", ReminderEmailSubject: "" }
+        });
+      } catch (err) {
+        console.error("Error while resetting reminder email: ", err);
+      } finally {
+        setIsMailLoader((p) => ({ ...p, reminder: false }));
       }
     }
   });
@@ -311,6 +416,7 @@ const MailTemplateEditor = ({
           <h1 className="text-[14px] mb-[0.7rem] font-medium">
             {t("completion-email")}
           </h1>
+
           <div className="relative my-2">
             {isMailLoader.completion && (
               <div className="flex z-[100] justify-center items-center absolute w-full h-full rounded-box bg-black/30">
@@ -385,7 +491,153 @@ const MailTemplateEditor = ({
                 <button
                   type="button"
                   className="op-btn op-btn-secondary"
-                  onClick={() => handleReset(null, "completion")}
+                  onClick={() => handleReset("completion")}
+                >
+                  {t("reset")}
+                </button>
+              </div>
+            </form>
+          </div>
+          <h1 className="text-[14px] mb-[0.7rem] font-medium">
+            Setup Email
+          </h1>
+          <div className="relative my-2">
+            {isMailLoader.setup && (
+              <div className="flex z-[100] justify-center items-center absolute w-full h-full rounded-box bg-black/30">
+                <Loader />
+              </div>
+            )}
+            {isDefaultMail?.setupMail && (
+              <div className="absolute backdrop-blur-[2px] flex w-full h-full justify-center items-center bg-black/10 rounded-box select-none z-20">
+                <button
+                  onClick={() => handleModifyMail("setup")}
+                  className="op-btn op-btn-primary shadow-lg"
+                >
+                  {t("modify")}
+                </button>
+              </div>
+            )}
+            <form
+              onSubmit={handleSaveSetupEmail}
+              className="p-3 border-[1px] border-base-content rounded-box"
+            >
+              <div className="text-lg font-normal">
+                <label className="text-sm">
+                  {t("subject")}{" "}
+                  <Tooltip
+                    id={"setup-sub-tooltip"}
+                    message="Sent when a new user account is created. Use {{link}} as the password setup link placeholder."
+                  />
+                </label>
+                <input
+                  required
+                  value={setupEmailSubject}
+                  onChange={(e) => setSetupEmailSubject(e.target.value)}
+                  placeholder="Welcome to OpenSign - Set Your Password"
+                  className="w-full op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content text-xs"
+                />
+              </div>
+              <div className="text-lg font-normal py-2">
+                <label className="text-sm mt-3">
+                  {t("body")}{" "}
+                  <Tooltip
+                    id={"setup-body-tooltip"}
+                    message="Use {{link}} where the password setup button/link should appear."
+                  />
+                </label>
+                <EmailBodyEditor
+                  value={setupEmailBody}
+                  onChange={(html) => html && setSetupEmailBody(html)}
+                  bodyName="setup"
+                  isReset={isMailLoader?.setup}
+                  isTemplateLoaded={isTemplateLoaded}
+                />
+              </div>
+              <div className="flex items-center mt-3 gap-2">
+                <button
+                  disabled={!setupEmailBody || !setupEmailSubject}
+                  className="op-btn op-btn-primary"
+                  type="submit"
+                >
+                  {t("save")}
+                </button>
+                <button
+                  type="button"
+                  className="op-btn op-btn-secondary"
+                  onClick={() => handleReset("setup")}
+                >
+                  {t("reset")}
+                </button>
+              </div>
+            </form>
+          </div>
+          <h1 className="text-[14px] mb-[0.7rem] font-medium">
+            Reminder Email
+          </h1>
+          <div className="relative my-2">
+            {isMailLoader.reminder && (
+              <div className="flex z-[100] justify-center items-center absolute w-full h-full rounded-box bg-black/30">
+                <Loader />
+              </div>
+            )}
+            {isDefaultMail?.reminderMail && (
+              <div className="absolute backdrop-blur-[2px] flex w-full h-full justify-center items-center bg-black/10 rounded-box select-none z-20">
+                <button
+                  onClick={() => handleModifyMail("reminder")}
+                  className="op-btn op-btn-primary shadow-lg"
+                >
+                  {t("modify")}
+                </button>
+              </div>
+            )}
+            <form
+              onSubmit={handleSaveReminderEmail}
+              className="p-3 border-[1px] border-base-content rounded-box"
+            >
+              <div className="text-lg font-normal">
+                <label className="text-sm">
+                  {t("subject")}{" "}
+                  <Tooltip
+                    id={"reminder-sub-tooltip"}
+                    message={`${t("variables-use")}: {{document_title}}, {{sender_name}}, {{sender_mail}}, {{sender_phone}}, {{receiver_name}}, {{receiver_email}}, {{receiver_phone}}, {{expiry_date}}, {{company_name}}, {{signing_url}}`}
+                  />
+                </label>
+                <input
+                  required
+                  value={reminderEmailSubject}
+                  onChange={(e) => setReminderEmailSubject(e.target.value)}
+                  placeholder="Reminder: Your signature is needed on {{document_title}}"
+                  className="w-full op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content text-xs"
+                />
+              </div>
+              <div className="text-lg font-normal py-2">
+                <label className="text-sm mt-3">
+                  {t("body")}{" "}
+                  <Tooltip
+                    id={"reminder-body-tooltip"}
+                    message={`${t("variables-use")}: {{document_title}}, {{sender_name}}, {{sender_mail}}, {{sender_phone}}, {{receiver_name}}, {{receiver_email}}, {{receiver_phone}}, {{expiry_date}}, {{company_name}}, {{signing_url}}`}
+                  />
+                </label>
+                <EmailBodyEditor
+                  value={reminderEmailBody}
+                  onChange={(html) => html && setReminderEmailBody(html)}
+                  bodyName="reminder"
+                  isReset={isMailLoader?.reminder}
+                  isTemplateLoaded={isTemplateLoaded}
+                />
+              </div>
+              <div className="flex items-center mt-3 gap-2">
+                <button
+                  disabled={!reminderEmailBody || !reminderEmailSubject}
+                  className="op-btn op-btn-primary"
+                  type="submit"
+                >
+                  {t("save")}
+                </button>
+                <button
+                  type="button"
+                  className="op-btn op-btn-secondary"
+                  onClick={() => handleReset("reminder")}
                 >
                   {t("reset")}
                 </button>
