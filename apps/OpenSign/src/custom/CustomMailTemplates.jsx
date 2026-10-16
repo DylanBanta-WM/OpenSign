@@ -1,6 +1,8 @@
 // West Muskingum: editors for the Setup and Reminder email templates, shown on
 // Preferences > Email below upstream's request/completion editors.
 // Saved on the tenant via the custom `updatecustomemailtemplates` cloud function.
+// Uses upstream's EmailEditor (Basic = rich text, Advanced = raw HTML); the choice per
+// template is kept in the tenant's CustomEmailEditorType ({ setup, reminder }).
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Parse from "parse";
@@ -8,7 +10,7 @@ import { useDispatch } from "react-redux";
 import Tooltip from "../primitives/Tooltip";
 import Alert from "../primitives/Alert";
 import Loader from "../primitives/Loader";
-import EmailBodyEditor from "../components/EmailBodyEditor";
+import EmailEditor from "../components/emaileditor";
 import { withSessionValidation } from "../utils";
 import { setTenantInfo } from "../redux/reducers/userReducer";
 
@@ -45,7 +47,8 @@ const TemplateSection = ({ template, info, tenantId, showAlert }) => {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { key, bodyField, subjectField, defaultBody, defaultSubject } = template;
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState({ basic: "", advanced: "" });
+  const [editorType, setEditorType] = useState("basic");
   const [subject, setSubject] = useState("");
   const [isDefault, setIsDefault] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,29 +57,40 @@ const TemplateSection = ({ template, info, tenantId, showAlert }) => {
   useEffect(() => {
     if (!info || info === "user does not exist!") return;
     if (info?.[bodyField]) {
-      setBody(info[bodyField]);
+      setBody({ basic: info[bodyField], advanced: info[bodyField] });
       setSubject(info[subjectField]);
       setIsDefault(false);
+      // Templates saved before the editor toggle existed are raw HTML: open them in Advanced
+      setEditorType(info?.CustomEmailEditorType?.[key] || "advanced");
     } else {
-      setBody(defaultBody);
+      setBody({ basic: defaultBody, advanced: defaultBody });
       setSubject(defaultSubject);
       setIsDefault(true);
+      setEditorType("basic");
     }
     setIsTemplateLoaded((p) => !p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info]);
 
-  const saveToTenant = async (newBody, newSubject) => {
+  const saveToTenant = async (newBody, newSubject, newEditorType) => {
+    const editorTypes = { ...info?.CustomEmailEditorType };
+    if (newEditorType) editorTypes[key] = newEditorType;
+    else delete editorTypes[key];
     const res = await Parse.Cloud.run("updatecustomemailtemplates", {
       tenantId,
-      details: { [bodyField]: newBody, [subjectField]: newSubject }
+      details: {
+        [bodyField]: newBody,
+        [subjectField]: newSubject,
+        CustomEmailEditorType: editorTypes
+      }
     });
     const updateRes = JSON.parse(JSON.stringify(res));
     dispatch(
       setTenantInfo({
         ...info,
         [bodyField]: updateRes?.[bodyField] ?? "",
-        [subjectField]: updateRes?.[subjectField] ?? ""
+        [subjectField]: updateRes?.[subjectField] ?? "",
+        CustomEmailEditorType: updateRes?.CustomEmailEditorType
       })
     );
     return updateRes;
@@ -85,10 +99,10 @@ const TemplateSection = ({ template, info, tenantId, showAlert }) => {
   const handleSave = withSessionValidation(async (e) => {
     e.preventDefault();
     try {
-      const replacedHtmlBody = body.replace(/"/g, "'");
+      const replacedHtmlBody = body[editorType]?.replace(/"/g, "'");
       const htmlBody = `<html><head><meta http-equiv='Content-Type' content='text/html; charset=UTF-8' /></head><body>${replacedHtmlBody}</body></html>`;
-      const updateRes = await saveToTenant(htmlBody, subject);
-      setBody(updateRes?.[bodyField]);
+      const updateRes = await saveToTenant(htmlBody, subject, editorType);
+      setBody({ basic: updateRes?.[bodyField], advanced: updateRes?.[bodyField] });
       setSubject(updateRes?.[subjectField]);
       showAlert("success", t("saved-successfully"));
     } catch (err) {
@@ -100,11 +114,12 @@ const TemplateSection = ({ template, info, tenantId, showAlert }) => {
   const handleReset = withSessionValidation(async () => {
     if (isDefault) return;
     setIsDefault(true);
-    setBody(defaultBody);
+    setBody({ basic: defaultBody, advanced: defaultBody });
     setSubject(defaultSubject);
+    setEditorType("basic");
     setIsLoading(true);
     try {
-      await saveToTenant("", "");
+      await saveToTenant("", "", null);
     } catch (err) {
       console.error(`Error while resetting ${key} email: `, err);
     } finally {
@@ -153,12 +168,27 @@ const TemplateSection = ({ template, info, tenantId, showAlert }) => {
             />
           </div>
           <div className="text-lg font-normal py-2">
-            <label className="text-sm mt-3">
-              {t("body")} <Tooltip id={`${key}-body-tooltip`} message={bodyHelp} />
+            <label className="flex justify-between text-sm mt-3">
+              <span>
+                {t("body")} <Tooltip id={`${key}-body-tooltip`} message={bodyHelp} />
+              </span>
+              <button
+                className="op-link op-link-primary"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEditorType((p) => (p === "basic" ? "advanced" : "basic"));
+                }}
+              >
+                {editorType === "basic" ? t("switch-to-advanced") : t("switch-to-basic")}
+              </button>
             </label>
-            <EmailBodyEditor
-              value={body}
-              onChange={(html) => html && setBody(html)}
+            <EmailEditor
+              type={editorType}
+              values={body}
+              onChange={(html, changedType) =>
+                html && setBody((p) => ({ ...p, [changedType]: html }))
+              }
               bodyName={key}
               isReset={isLoading}
               isTemplateLoaded={isTemplateLoaded}
@@ -166,7 +196,7 @@ const TemplateSection = ({ template, info, tenantId, showAlert }) => {
           </div>
           <div className="flex items-center mt-3 gap-2">
             <button
-              disabled={!body || !subject}
+              disabled={!body[editorType] || !subject}
               className="op-btn op-btn-primary"
               type="submit"
             >

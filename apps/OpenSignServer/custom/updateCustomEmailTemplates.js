@@ -1,10 +1,16 @@
-const validKeys = ['SetupEmailBody', 'SetupEmailSubject', 'ReminderEmailBody', 'ReminderEmailSubject'];
+const validKeys = [
+  'SetupEmailBody',
+  'SetupEmailSubject',
+  'ReminderEmailBody',
+  'ReminderEmailSubject',
+  'CustomEmailEditorType', // { setup, reminder }: 'basic' | 'advanced'
+];
 
 /**
  * Saves the West Muskingum-specific email templates (setup + reminder) on the tenant.
  * Kept separate from upstream's updatetenant so upstream can change that function freely.
  *
- * Params: tenantId, details: { SetupEmailBody?, SetupEmailSubject?, ReminderEmailBody?, ReminderEmailSubject? }
+ * Params: tenantId, details: { SetupEmailBody?, SetupEmailSubject?, ReminderEmailBody?, ReminderEmailSubject?, CustomEmailEditorType? }
  * Only admins of the tenant may call it.
  */
 export default async function updateCustomEmailTemplates(request) {

@@ -70,6 +70,8 @@ R=$(as "$ADMIN_TOKEN" -X POST "$SERVER/functions/updatetenant" -d "{\"tenantId\"
 check "upstream updatetenant saves request template" "$(jq -r .result.RequestSubject <<<"$R")" "Req $RUN"
 R=$(as "$ADMIN_TOKEN" -X POST "$SERVER/functions/updatecustomemailtemplates" -d "{\"tenantId\":\"$TENANT_ID\",\"details\":{\"SetupEmailSubject\":\"Custom setup $RUN\",\"SetupEmailBody\":\"<p>Custom setup <a href='{{link}}'>go</a></p>\",\"ReminderEmailSubject\":\"Custom reminder {{document_title}}\",\"ReminderEmailBody\":\"<p>Hi {{receiver_name}} please sign {{document_title}} at {{signing_url}}</p>\"}}")
 check "admin saves setup+reminder templates" "$(jq -r .result.SetupEmailSubject <<<"$R")" "Custom setup $RUN"
+R=$(as "$ADMIN_TOKEN" -X POST "$SERVER/functions/updatecustomemailtemplates" -d "{\"tenantId\":\"$TENANT_ID\",\"details\":{\"CustomEmailEditorType\":{\"setup\":\"advanced\",\"reminder\":\"basic\"}}}")
+check "editor type (basic/advanced) is saved" "$(jq -r .result.CustomEmailEditorType.setup <<<"$R")" "advanced"
 R=$(as "$USER_TOKEN" -X POST "$SERVER/functions/updatecustomemailtemplates" -d "{\"tenantId\":\"$TENANT_ID\",\"details\":{\"SetupEmailSubject\":\"hacked\"}}")
 check "non-admin is refused" "$(jq -r .code <<<"$R")" "119"
 R=$(as "$ADMIN_TOKEN" -X POST "$SERVER/functions/updatecustomemailtemplates" -d "{\"tenantId\":\"someOtherTenant\",\"details\":{\"SetupEmailSubject\":\"hacked\"}}")
