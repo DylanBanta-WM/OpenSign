@@ -62,13 +62,18 @@ docker build -f westm/server.Dockerfile -t westm-opensignserver:v2.42.0 .
 docker build -f westm/client.Dockerfile -t westm-opensign:v2.42.0 .
 
 cd westm/test-stack
+# Signing needs a certificate: make a throwaway self-signed one (not committed)
+openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=OpenSign TEST ONLY" -keyout /tmp/k.pem -out /tmp/c.pem
+openssl pkcs12 -export -inkey /tmp/k.pem -in /tmp/c.pem -out /tmp/test.pfx -passout pass:testpass
+echo "PFX_BASE64=$(base64 -w0 /tmp/test.pfx)" > test.local.env && echo "PASS_PHRASE=testpass" >> test.local.env
 TAG=v2.42.0 docker compose up -d
 ../smoke-test.sh                     # must end with "Failed: 0"
 ```
 
 Then click through it at http://localhost:3010. The smoke test leaves an admin
 (`admin-<timestamp>@example.com` / `Test-Passw0rd!`), and email lands in Mailpit at http://localhost:8025.
-- Preferences → Email: all four templates (request, completion, setup, reminder) save, reset and show "Modify"
+- Preferences → Email: all four templates (request, completion, setup, reminder) save and reset.
+  Paste our production request/completion HTML into the test tenant first — the test database starts empty.
 - Logos on the login page and in the header
 - Upload, place a signer, send, sign. The completion email and certificate show our logo.
 
@@ -91,6 +96,20 @@ docker compose build                                      # or retag the tested 
 docker compose up -d
 docker compose logs -f server                             # wait for "Successfully run migrations"
 ```
+
+**One-time, first deploy of v2.38+ only:** v2.38 added a Basic (rich-text) / Advanced (raw HTML)
+email editor and opens templates with no saved editor type in Basic. Basic flattens our table-based
+HTML templates, both on Preferences → Email and when sending a document. Pin existing custom templates
+to Advanced:
+
+```sh
+docker exec mongo-container mongosh --quiet OpenSignDB --eval '
+  db.partners_Tenant.updateMany(
+    { EmailEditorType: { $exists: false },
+      $or: [ { RequestBody: { $nin: [null, ""] } }, { CompletionBody: { $nin: [null, ""] } } ] },
+    { $set: { EmailEditorType: { request: "advanced", completion: "advanced" } } })'
+```
+Users must log out and back in to pick it up.
 
 Check https://sign.westmschools.com: log in, open Preferences → Email, and send yourself a reminder.
 

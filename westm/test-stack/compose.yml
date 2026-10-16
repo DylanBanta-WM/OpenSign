@@ -1,6 +1,7 @@
 # Throwaway local stack for westm/smoke-test.sh. Empty database, dummy secrets,
 # all email captured by Mailpit (http://localhost:8025). Not production.
 #   TAG=<image tag> docker compose up -d
+# To reach it from another machine: TEST_HOST=<this host's IP> TEST_BIND=0.0.0.0 (and tear it down after).
 name: wmtest
 services:
   testmongo:
@@ -12,16 +13,25 @@ services:
       retries: 20
   mailpit:
     image: axllent/mailpit
-    ports: ["127.0.0.1:8025:8025"]
+    ports: ["${TEST_BIND:-127.0.0.1}:8025:8025"]
   server:
     image: westm-opensignserver:${TAG}
     depends_on:
       testmongo: {condition: service_healthy}
-    env_file: test.env
-    environment: [NODE_ENV=production]
+    env_file:
+      - test.env
+      - {path: test.local.env, required: false}   # signing cert etc., not committed
+    environment:
+      - NODE_ENV=production
+      - SERVER_URL=http://${TEST_HOST:-localhost}:8092/app
+      - PUBLIC_URL=http://${TEST_HOST:-localhost}:3010
     volumes: [/usr/src/app/files]
-    ports: ["127.0.0.1:8092:8080"]
+    ports: ["${TEST_BIND:-127.0.0.1}:8092:8080"]
   client:
     image: westm-opensign:${TAG}
-    env_file: test.env
-    ports: ["127.0.0.1:3010:3000"]
+    env_file:
+      - test.env
+      - {path: test.local.env, required: false}   # signing cert etc., not committed
+    environment:
+      - REACT_APP_SERVERURL=http://${TEST_HOST:-localhost}:8092/app
+    ports: ["${TEST_BIND:-127.0.0.1}:3010:3000"]
