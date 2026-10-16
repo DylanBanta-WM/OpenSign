@@ -85,8 +85,10 @@ export default async function sendReminderEmail(request) {
   let targets = placeholders
     .map(ph => {
       const objectId = ph.signerObjId;
-      const existSigner = signers.find(s => s.objectId === objectId);
-      const email = existSigner?.Email || ph.email || '';
+      // Signers are included Parse.Objects (id / get()); placeholders created by
+      // OpenSign v2.41+ no longer carry `email`, so the signer is the source of truth.
+      const existSigner = signers.find(s => (s.id || s.objectId) === objectId);
+      const email = existSigner?.get?.('Email') || existSigner?.Email || ph.email || '';
       return { ph, existSigner: existSigner || {}, objectId, email };
     })
     .filter(({ email }) => email && !signedEmails.has(email.toLowerCase()));

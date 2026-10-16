@@ -108,6 +108,16 @@ check "custom reminder subject" "$(cut -f1 <<<"$M")" "Custom reminder Doc $RUN"
 grep -q "please sign Doc $RUN at http" <<<"$M" && ok "reminder variables substituted" || bad "reminder variables substituted"
 R=$(master -X POST "$SERVER/functions/sendreminderemail" -d "{\"documentId\":\"$DOC_ID\"}")
 check "master key (n8n) can send reminders" "$(jq -r .result.sent <<<"$R")" "1"
+# Documents created by OpenSign v2.41+ only reference the signer (contracts_Contactbook) —
+# no email on the placeholder.
+SIGNER2_EMAIL="signer2-$RUN@example.com"
+CONTACT_ID=$(master -X POST "$SERVER/classes/contracts_Contactbook" -d "{\"Name\":\"Signer Two\",\"Email\":\"$SIGNER2_EMAIL\",\"TenantId\":{\"__type\":\"Pointer\",\"className\":\"partners_Tenant\",\"objectId\":\"$TENANT_ID\"}}" | jq -r .objectId)
+DOC2_ID=$(master -X POST "$SERVER/classes/contracts_Document" -d "{\"Name\":\"Doc2 $RUN\",\"ExtUserPtr\":{\"__type\":\"Pointer\",\"className\":\"contracts_Users\",\"objectId\":\"$EXT_ID\"},\"Placeholders\":[{\"Id\":1,\"signerObjId\":\"$CONTACT_ID\",\"signerPtr\":{\"__type\":\"Pointer\",\"className\":\"contracts_Contactbook\",\"objectId\":\"$CONTACT_ID\"}}],\"Signers\":[{\"__type\":\"Pointer\",\"className\":\"contracts_Contactbook\",\"objectId\":\"$CONTACT_ID\"}]}" | jq -r .objectId)
+mail_clear
+R=$(master -X POST "$SERVER/functions/sendreminderemail" -d "{\"documentId\":\"$DOC2_ID\"}")
+check "reminder works for v2.41-style documents (signer only via Signers)" "$(jq -r .result.sent <<<"$R")" "1"
+M=$(mail_to "$SIGNER2_EMAIL") || M=""
+grep -q "Hi Signer Two" <<<"$M" && ok "reminder uses the signer's name from the contact" || bad "reminder uses the signer's name from the contact"
 
 echo "== Branding"
 curl -s "$SERVER/apps/choose_password?id=$APP_ID" | grep -q "westmschools.com" && ok "custom choose_password page served" || bad "custom choose_password page served"
