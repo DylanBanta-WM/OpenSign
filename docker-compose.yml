@@ -23,7 +23,7 @@ services:
     networks:
       - app-network
   mongo:
-    image: mongo:latest
+    image: mongo:8.2.5  # pinned: never jump major versions by accident; data FCV is 8.2
     restart: unless-stopped
     container_name: mongo-container
     volumes:
